@@ -11,7 +11,7 @@ nltk.download('punkt')
 from constants import *
 from utils import *
 from constants import EMBEDDING_MODEL_NAME
-from langchain.embeddings import HuggingFaceEmbeddings
+from langchain_community.embeddings import HuggingFaceEmbeddings
 
 
 
