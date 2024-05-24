@@ -13,6 +13,7 @@ from utils import *
 from pydantic import BaseModel
 from typing import List, Any
 from flask_ngrok import run_with_ngrok
+import threading
 
 
 
@@ -145,6 +146,28 @@ def re_ingest_all():
         return jsonify({"message" : f"Error occurred: {str(e)}"}), 500
 
 ###################################################### 3. Chat with LLM ##########################################################
+async def chat_stream(question, history):
+    # Dummy async generator for demonstration
+    for i in range(5):
+        await asyncio.sleep(1)  # Simulate async operation
+        yield f"Message {i} from the stream: Question was {question}\n"
+
+def start_async_loop(async_gen):
+    """Run the async generator and handle each item."""
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        return [chunk for chunk in loop.run_until_complete(collect_async_gen(async_gen))]
+    finally:
+        loop.close()
+
+async def collect_async_gen(async_gen):
+    """Collect items from an async generator."""
+    result = []
+    async for item in async_gen:
+        result.append(item)
+    return result
+
 @app.route("/chat_llm", methods=["POST"])
 def chat_llm():
     try:
@@ -152,18 +175,22 @@ def chat_llm():
         data = request.get_json()
         question = data.get("prompt")
         history = data.get("history", [])
+        print(question, history)
 
-        # Wrap the chat_stream generator in a Flask response
-        def stream_response():
-            try:
-                # Run the chat_stream coroutine in an event loop
-                result = asyncio.run(chat_stream(question, history))
-                for chunk in result:
-                    yield chunk
-            except Exception as e:
-                yield f"Error occurred: {str(e)}"
+        # Prepare the async generator
+        async_gen = chat_stream(question, history)
 
-        return Response(stream_with_context(stream_response()), mimetype="text/event-stream")
+        # Run the async generator in a separate thread
+        result = threading.Thread(target=start_async_loop, args=(async_gen,))
+        result.start()
+        result.join()
+
+        # Stream the response
+        def generate():
+            for chunk in result:
+                yield chunk
+
+        return Response(stream_with_context(generate()), mimetype="text/event-stream")
 
     except Exception as e:
         return jsonify({"message": f"Error occurred: {str(e)}"}), 500
