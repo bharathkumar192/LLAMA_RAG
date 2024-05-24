@@ -394,11 +394,13 @@ async def chat(question: str, chat_history=[]):
         print(e)
         raise e
 
+
+# The async chat streaming function
 async def chat_stream(question: str, chat_history=[]):
     try:
         callback = AsyncIteratorCallbackHandler()
-        chain = await qa_chain(callback)
         history = form_history_obj(chat_history)
+        chain = await create_qa_chain(callback, chat_history)
         input = {"input": question, "chat_history": history}
         task = asyncio.create_task(chain.ainvoke(input=input))
         print("Stream start")
@@ -410,3 +412,65 @@ async def chat_stream(question: str, chat_history=[]):
     except Exception as e:
         print(e)
         raise e
+
+
+# Function to load the Llama3 model
+def load_llama3_model():
+    device_type = "cuda" if torch.cuda.is_available() else "cpu"
+    model_id = MODEL_ID  # Replace with actual model ID
+    model, tokenizer = load_full_model(model_id, model_basename=None, device_type=device_type)
+    generation_config = GenerationConfig.from_pretrained(model_id)
+    streamer = TextStreamer(tokenizer, skip_prompt=True)
+    pipe = pipeline(
+        "text-generation",
+        model=model,
+        tokenizer=tokenizer,
+        max_length=512,
+        temperature=0.7,
+        repetition_penalty=1.2,
+        generation_config=generation_config,
+        streamer=streamer,
+        eos_token_id=tokenizer.eos_token_id
+    )
+    return HuggingFacePipeline(pipeline=pipe)
+
+async def create_qa_chain(callback, chat_history):
+    contextualize_q_system_prompt = """
+    Given a chat history and the latest user question which might reference context in the chat history, formulate a standalone question which can be understood without the chat history. Do NOT answer the question, just reformulate it if needed and otherwise return it as is.
+    """
+    contextualize_q_prompt = ChatPromptTemplate.from_messages(
+        [
+            ("system", contextualize_q_system_prompt),
+            MessagesPlaceholder("chat_history"),
+            ("human", "{input}"),
+        ]
+    )
+    
+    embeddings = HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL_NAME)
+    vectorstore = PineconeVectorStore(embedding=embeddings, index_name=PINECONE_INDEX)
+    llm = load_llama3_model()
+    retriever = vectorstore.as_retriever()
+    history_aware_retriever = create_history_aware_retriever(
+        llm, retriever, contextualize_q_prompt
+    )
+    
+    qa_system_prompt = """
+    You are an assistant for question-answering tasks. Use the following pieces of retrieved context to answer the question. If you don't know the answer, just say that you don't know.
+
+    {context}
+    
+    Always provide your answers in markdown format
+    """
+    qa_prompt = ChatPromptTemplate.from_messages(
+        [
+            ("system", qa_system_prompt),
+            MessagesPlaceholder("chat_history"),
+            ("human", "{input}"),
+        ]
+    )
+    
+    streaming_llm = load_llama3_model()
+    question_answer_chain = create_stuff_documents_chain(streaming_llm, qa_prompt)
+    rag_chain = create_retrieval_chain(history_aware_retriever, question_answer_chain)
+    
+    return rag_chain

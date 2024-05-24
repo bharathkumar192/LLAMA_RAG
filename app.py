@@ -147,8 +147,8 @@ def re_ingest_all():
         return jsonify({"message" : f"Error occurred: {str(e)}"}), 500
 
 ###################################################### 3. Chat with LLM ##########################################################
-# Wrap the async function to run in an event loop
-async def run_async(func, *args):
+# Function to run the async loop
+def run_async(func, *args):
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     result = loop.run_until_complete(func(*args))
@@ -157,7 +157,7 @@ async def run_async(func, *args):
 
 # Flask route for chat streaming
 @app.route("/chat_llm", methods=["POST"])
-async def chat_llm():
+def chat_llm():
     try:
         # Get the request data
         data = request.get_json()
@@ -187,10 +187,11 @@ async def collect_stream(async_gen):
 
 # #########################################################################################################
 @app.route("/chat_direct", methods=["POST"])
-async def chat_api(chat_request: ChatRequest):
+def chat_api(chat_request: ChatRequest):
     try:
-        prompt = chat_request.prompt
-        history = chat_request.history
+        data = request.get_json()
+        question = data.get("prompt")
+        history = data.get("history", [])
         result = await chat(prompt, history)
         return result
     except Exception as e:
