@@ -8,7 +8,7 @@
 # )
 # pipeline("Hey how are you doing today?")
 
-# python3 -c "from huggingface_hub.hf_api import HfFolder; HfFolder.save_token('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')"
+# python3 -c "from huggingface_hub.hf_api import HfFolder; HfFolder.save_token('')"
 
 from langchain.vectorstores import Chroma
 from constants import (
