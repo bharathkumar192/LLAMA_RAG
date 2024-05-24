@@ -147,26 +147,12 @@ def re_ingest_all():
         return jsonify({"message" : f"Error occurred: {str(e)}"}), 500
 
 ###################################################### 3. Chat with LLM ##########################################################
-async def chat_stream(question, history):
-    # Dummy async generator for demonstration
-    for i in range(5):
-        await asyncio.sleep(1)  # Simulate async operation
-        yield f"Message {i} from the stream: Question was {question}\n"
-
+# Wrap the async function to run in an event loop
 def start_async_loop(async_gen):
-    """Run the async generator and handle each item."""
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
-    try:
-        return [chunk for chunk in loop.run_until_complete(collect_async_gen(async_gen))]
-    finally:
-        loop.close()
-
-async def collect_async_gen(async_gen):
-    """Collect items from an async generator."""
-    result = []
-    async for item in async_gen:
-        result.append(item)
+    result = loop.run_until_complete(async_gen)
+    loop.close()
     return result
 
 @app.route("/chat_llm", methods=["POST"])

@@ -385,6 +385,7 @@ def load_model(device_type, model_id, model_basename=None, LOGGING=logging):
 
 
 
+# The async chat streaming function
 async def chat_stream(question: str, chat_history=[]):
     try:
         callback = AsyncIteratorCallbackHandler()
