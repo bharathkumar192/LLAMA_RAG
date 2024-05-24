@@ -418,7 +418,7 @@ async def chat_stream(question: str, chat_history=[]):
 # Function to load the Llama3 model
 def load_llama3_model():
     device_type = "cuda" if torch.cuda.is_available() else "cpu"
-    model_id = "llama3"  # Replace with actual model ID
+    model_id = MODEL_ID  # Replace with actual model ID
     model, tokenizer = load_full_model(model_id, model_basename=None, device_type=device_type)
     generation_config = GenerationConfig.from_pretrained(model_id)
     streamer = TextStreamer(tokenizer, skip_prompt=True)
@@ -446,11 +446,12 @@ async def create_qa_chain(callback, chat_history):
             ("human", "{input}"),
         ]
     )
-    
-    embeddings = HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL_NAME)
-    vectorstore = PineconeVectorStore(embedding=embeddings, index_name=PINECONE_INDEX)
+
+    db = Chroma(persist_directory=PERSIST_DIRECTORY, embedding_function=embeddings, client_settings=CHROMA_SETTINGS)
+    retriever = db.as_retriever()
+    embeddings = get_embeddings(device_type)
     llm = load_llama3_model()
-    retriever = vectorstore.as_retriever()
+
     history_aware_retriever = create_history_aware_retriever(
         llm, retriever, contextualize_q_prompt
     )
