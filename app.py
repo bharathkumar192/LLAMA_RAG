@@ -187,7 +187,7 @@ async def collect_stream(async_gen):
 
 # #########################################################################################################
 @app.route("/chat_direct", methods=["POST"])
-def chat_api(chat_request: ChatRequest):
+async def chat_api(chat_request: ChatRequest):
     try:
         data = request.get_json()
         question = data.get("prompt")

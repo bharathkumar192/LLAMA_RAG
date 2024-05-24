@@ -7,7 +7,7 @@ import logging
 import click
 import torch
 from langchain_community.vectorstores import Chroma
-from constants import *
+from LLAMA_RAG.constants import *
 from langchain.embeddings import HuggingFaceEmbeddings
 import sqlite3
 from datetime import datetime
@@ -16,14 +16,13 @@ from langchain_community.document_loaders import DirectoryLoader
 from langchain_text_splitters import Language, RecursiveCharacterTextSplitter
 import asyncio
 from langchain.callbacks.streaming_aiter import AsyncIteratorCallbackHandler
-from load_models import load_full_model
+from LLAMA_RAG.load_models import load_full_model
 from langchain.chains import RetrievalQA
-from prompt_template_utils import get_prompt_template
+from LLAMA_RAG.prompt_template_utils import get_prompt_template,system_prompt
 from langchain.chains import create_history_aware_retriever, create_retrieval_chain
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain.chains.combine_documents import create_stuff_documents_chain
 from llm_templates import Formatter, Conversation, Content
-from prompt_template_utils import system_prompt
 from langchain_community.llms import HuggingFacePipeline
 from langchain_core.documents import Document
 from langchain_core.messages import AIMessage, HumanMessage
@@ -339,26 +338,26 @@ def form_history_obj(history):
 
 
 
-async def qa_chain(llm, retriever, chat_history):
-    # Convert chat history into the format required by llama3
-    formatted_history = form_history_obj(chat_history)
+# async def qa_chain(llm, retriever, chat_history):
+#     # Convert chat history into the format required by llama3
+#     formatted_history = form_history_obj(chat_history)
     
-    # Set up the prompt template with system and placeholder for user input
-    messages = [Content(role="system", content=system_prompt)]
-    messages.extend([Content(role="user", content=msg.content) for msg in formatted_history if isinstance(msg, HumanMessage)])
-    messages.append(Content(role="assistant", content=""))  
+#     # Set up the prompt template with system and placeholder for user input
+#     messages = [Content(role="system", content=system_prompt)]
+#     messages.extend([Content(role="user", content=msg.content) for msg in formatted_history if isinstance(msg, HumanMessage)])
+#     messages.append(Content(role="assistant", content=""))  
 
-    # Create the conversation object
-    conversation = Conversation(model='llama3', messages=messages)
-    conversation_str = Formatter().render(conversation, add_assistant_prompt=True)
+#     # Create the conversation object
+#     conversation = Conversation(model='llama3', messages=messages)
+#     conversation_str = Formatter().render(conversation, add_assistant_prompt=True)
     
-    # Use the existing retrieval and document processing chains but now with the new conversation
-    qa_prompt = ChatPromptTemplate.from_template(conversation_str)
-    question_answer_chain = create_stuff_documents_chain(llm, qa_prompt)
-    history_aware_retriever = create_history_aware_retriever(llm, retriever, qa_prompt)
-    rag_chain = create_retrieval_chain(history_aware_retriever, question_answer_chain)
+#     # Use the existing retrieval and document processing chains but now with the new conversation
+#     qa_prompt = ChatPromptTemplate.from_template(conversation_str)
+#     question_answer_chain = create_stuff_documents_chain(llm, qa_prompt)
+#     history_aware_retriever = create_history_aware_retriever(llm, retriever, qa_prompt)
+#     rag_chain = create_retrieval_chain(history_aware_retriever, question_answer_chain)
 
-    return rag_chain
+#     return rag_chain
 
 
 def load_model(device_type, model_id, model_basename=None, LOGGING=logging):
@@ -385,7 +384,8 @@ def load_model(device_type, model_id, model_basename=None, LOGGING=logging):
 
 async def chat(question: str, chat_history=[]):
     try:
-        chain = await qa_chain()
+        callback = AsyncIteratorCallbackHandler()
+        chain, retriever = await create_qa_chain(callback, chat_history)
         history = form_history_obj(chat_history)
         input = {"input": question, "chat_history": history}
         result = chain.invoke(input)
@@ -394,13 +394,11 @@ async def chat(question: str, chat_history=[]):
         print(e)
         raise e
 
-
-# The async chat streaming function
 async def chat_stream(question: str, chat_history=[]):
     try:
         callback = AsyncIteratorCallbackHandler()
+        chain, retriever = await create_qa_chain(callback, chat_history)
         history = form_history_obj(chat_history)
-        chain = await create_qa_chain(callback, chat_history)
         input = {"input": question, "chat_history": history}
         task = asyncio.create_task(chain.ainvoke(input=input))
         print("Stream start")
@@ -414,10 +412,13 @@ async def chat_stream(question: str, chat_history=[]):
         raise e
 
 
+
+
+
 # Function to load the Llama3 model
 def load_llama3_model():
     device_type = "cuda" if torch.cuda.is_available() else "cpu"
-    model_id = MODEL_ID  # Replace with actual model ID
+    model_id = "llama3"  # Replace with actual model ID
     model, tokenizer = load_full_model(model_id, model_basename=None, device_type=device_type)
     generation_config = GenerationConfig.from_pretrained(model_id)
     streamer = TextStreamer(tokenizer, skip_prompt=True)
