@@ -8,7 +8,7 @@ import click
 import torch
 from langchain.docstore.document import Document
 from langchain.text_splitter import Language, RecursiveCharacterTextSplitter
-from langchain.vectorstores import Chroma
+from langchain_community.vectorstores import Chroma
 from constants import *
 from langchain.embeddings import HuggingFaceEmbeddings
 import sqlite3

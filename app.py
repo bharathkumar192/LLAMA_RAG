@@ -212,8 +212,10 @@ if __name__ == "__main__":
     )
     parser.add_argument("--debug",type=bool, default=False)
     args = parser.parse_args()
-
+    app.debug = args.debug
+    app.host = args.host
+    app.port = args.port
     logging.basicConfig(
         format="%(asctime)s - %(levelname)s - %(filename)s:%(lineno)s - %(message)s", level=logging.INFO
     )
-    app.run(debug=args.debug, host=args.host, port=args.port)
+    app.run()

@@ -11,7 +11,7 @@ from langchain.callbacks.manager import CallbackManager
 callback_manager = CallbackManager([StreamingStdOutCallbackHandler()])
 
 from prompt_template_utils import get_prompt_template
-from langchain.vectorstores import Chroma
+from langchain_community.vectorstores import Chroma
 from transformers import (
     GenerationConfig,
     pipeline,

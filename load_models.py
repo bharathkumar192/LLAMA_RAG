@@ -2,7 +2,7 @@ import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer,  BitsAndBytesConfig
 from constants import  MODELS_PATH
 
-def load_full_model(model_id, device_type, logging):
+def load_full_model(model_id, model_basename ,device_type, logging):
 
     if device_type.lower() in ["mps", "cpu"]:
         logging.info("Using AutoModelForCausalLM")
