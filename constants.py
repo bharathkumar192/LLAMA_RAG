@@ -2,9 +2,7 @@ import os
 
 # from dotenv import load_dotenv
 from chromadb.config import Settings
-from langchain.document_loaders import CSVLoader, PDFMinerLoader, TextLoader, UnstructuredExcelLoader, Docx2txtLoader
-from langchain.document_loaders import UnstructuredFileLoader, UnstructuredMarkdownLoader
-from langchain.document_loaders import UnstructuredHTMLLoader
+from langchain_community.document_loaders import CSVLoader, Docx2txtLoader, PDFMinerLoader, TextLoader, UnstructuredExcelLoader, UnstructuredFileLoader, UnstructuredHTMLLoader, UnstructuredMarkdownLoader
 
 
 # load_dotenv()

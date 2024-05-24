@@ -1,10 +1,11 @@
 import logging
 import click
 import torch
-from langchain.text_splitter import Language, RecursiveCharacterTextSplitter
-from langchain.vectorstores import Chroma
 
 import nltk
+from langchain_community.vectorstores import Chroma
+from langchain_text_splitters import Language, RecursiveCharacterTextSplitter
+
 nltk.download('punkt')
 
 from constants import *

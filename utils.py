@@ -6,20 +6,16 @@ from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_compl
 import logging
 import click
 import torch
-from langchain.docstore.document import Document
-from langchain.text_splitter import Language, RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import Chroma
 from constants import *
 from langchain.embeddings import HuggingFaceEmbeddings
 import sqlite3
 from datetime import datetime
-from langchain.schema import AIMessage, HumanMessage
 from transformers import pipeline, TextStreamer, GenerationConfig
 from langchain_community.document_loaders import DirectoryLoader
-from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_text_splitters import Language, RecursiveCharacterTextSplitter
 import asyncio
 from langchain.callbacks.streaming_aiter import AsyncIteratorCallbackHandler
-from langchain.schema import AIMessage, HumanMessage
 from load_models import load_full_model
 from langchain.chains import RetrievalQA
 from prompt_template_utils import get_prompt_template
@@ -28,7 +24,9 @@ from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain.chains.combine_documents import create_stuff_documents_chain
 from llm_templates import Formatter, Conversation, Content
 from prompt_template_utils import system_prompt
-from langchain.llms import HuggingFacePipeline
+from langchain_community.llms import HuggingFacePipeline
+from langchain_core.documents import Document
+from langchain_core.messages import AIMessage, HumanMessage
 
 
 

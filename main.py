@@ -4,9 +4,8 @@ import click
 import torch
 import utils
 from langchain.chains import RetrievalQA
-from langchain.llms import HuggingFacePipeline
-from langchain.callbacks.streaming_stdout import StreamingStdOutCallbackHandler  # for streaming response
-from langchain.callbacks.manager import CallbackManager
+from langchain_community.llms import HuggingFacePipeline
+from langchain_core.callbacks import CallbackManager, StreamingStdOutCallbackHandler
 
 callback_manager = CallbackManager([StreamingStdOutCallbackHandler()])
 

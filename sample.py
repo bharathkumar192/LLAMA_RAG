@@ -10,7 +10,6 @@
 
 # python3 -c "from huggingface_hub.hf_api import HfFolder; HfFolder.save_token('')"
 
-from langchain.vectorstores import Chroma
 from constants import (
     CHROMA_SETTINGS,
     DOCUMENT_MAP,
@@ -21,6 +20,7 @@ from constants import (
 )
 from constants import EMBEDDING_MODEL_NAME
 from langchain.embeddings import HuggingFaceEmbeddings
+from langchain_community.vectorstores import Chroma
 
 def get_embeddings(device_type="cpu"):
     return HuggingFaceEmbeddings(
