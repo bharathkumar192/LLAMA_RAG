@@ -446,10 +446,10 @@ async def create_qa_chain(callback, chat_history):
             ("human", "{input}"),
         ]
     )
-
+    embeddings = get_embeddings(device_type)
     db = Chroma(persist_directory=PERSIST_DIRECTORY, embedding_function=embeddings, client_settings=CHROMA_SETTINGS)
     retriever = db.as_retriever()
-    embeddings = get_embeddings(device_type)
+    
     llm = load_llama3_model()
 
     history_aware_retriever = create_history_aware_retriever(
