@@ -14,7 +14,8 @@ from pydantic import BaseModel
 from typing import List, Any
 from flask_ngrok import run_with_ngrok
 import threading
-
+import getpass
+from pyngrok import ngrok, conf
 
 
 class ChatRequest(BaseModel):
@@ -230,4 +231,12 @@ if __name__ == "__main__":
     logging.basicConfig(
         format="%(asctime)s - %(levelname)s - %(filename)s:%(lineno)s - %(message)s", level=logging.INFO
     )
-    app.run()
+    print("Enter your authtoken, which can be copied from https://dashboard.ngrok.com/get-started/your-authtoken")
+    conf.get_default().auth_token = getpass.getpass()
+    ngrok.set_auth_token(conf.get_default().auth_token)
+
+    public_url = ngrok.connect(5000).public_url
+    print(f"ngrok tunnel \"{public_url}\" -> \"http://127.0.0.1:5000/\"")
+    app.config["BASE_URL"] = public_url
+
+    threading.Thread(target=app.run).start()
