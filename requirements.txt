@@ -14,6 +14,7 @@ protobuf==3.20.3; sys_platform == 'darwin' and platform_machine == 'arm64'
 auto-gptq==0.6.0; sys_platform != 'darwin'
 docx2txt
 unstructured
+flask-ngrok
 
 # Utilities
 urllib3==1.26.6

@@ -3,29 +3,23 @@ import os
 import shutil
 import subprocess
 import argparse
+
 import torch
-from langchain.chains import RetrievalQA
-from langchain.embeddings import HuggingFaceInstructEmbeddings
-from langchain.embeddings import HuggingFaceEmbeddings
+from flask import Flask, jsonify, request, stream_with_context, Response
 from main import load_model
-from prompt_template_utils import get_prompt_template
-from langchain.callbacks.streaming_stdout import StreamingStdOutCallbackHandler
-from langchain.vectorstores import Chroma
-from werkzeug.utils import secure_filename
-from flask import Flask, request, jsonify, Response
-from werkzeug.utils import secure_filename
-import os
-from flask_cors import CORS, cross_origin
-app = Flask(__name__)
-cors = CORS(app)
-app.config['CORS_HEADERS'] = 'Content-Type'
-import time 
+import asyncio
 from constants import *
-from threading import Lock
 from utils import *
+from pydantic import BaseModel
+from typing import List, Any
+from flask_ngrok import run_with_ngrok
 
 
-request_lock = Lock()
+
+class ChatRequest(BaseModel):
+    prompt: str
+    history: List[Any]
+
 if torch.backends.mps.is_available():
     DEVICE_TYPE = "mps"
 elif torch.cuda.is_available():
@@ -33,142 +27,176 @@ elif torch.cuda.is_available():
 else:
     DEVICE_TYPE = "cpu"
 
-
-
 SHOW_SOURCES = True
-logging.info(f"Running on: {DEVICE_TYPE}")
-logging.info(f"Display Source Documents set to: {SHOW_SOURCES}")
+global DB
+global RETRIEVER
+global QA
 
-
-
-EMBEDDINGS = get_embeddings(DEVICE_TYPE)
-
-# load the vectorstore
-DB = Chroma(
-    persist_directory=PERSIST_DIRECTORY,
-    embedding_function=EMBEDDINGS,
-    client_settings=CHROMA_SETTINGS,
-)
-
-RETRIEVER = DB.as_retriever()
+global chatUser
+chatUser = {'name': "N/A", 'org' : "N/A", 'email' : "N/A"}
 
 LLM = load_model(device_type=DEVICE_TYPE, model_id=MODEL_ID, model_basename=MODEL_BASENAME)
-prompt, memory = get_prompt_template(promptTemplate_type="llama", history=False)
 
-QA = RetrievalQA.from_chain_type(
-    llm=LLM,
-    chain_type="stuff",
-    retriever=RETRIEVER,
-    return_source_documents=SHOW_SOURCES,
-    chain_type_kwargs={
-        "prompt": prompt,
-    },
-)
 
+from flask_cors import CORS
 app = Flask(__name__)
+cors = CORS(app)
+run_with_ngrok(app)
+app.config['CORS_HEADERS'] = 'Content-Type'
+
+# 1. Ingest new docs
+# 2. Re ingest (clear DB and reingest all docs again)
+# 3. Chat with LLM
+# 4. Summarize the conversation
+# 5. Feedback storing
+# 6. Clear chat history. Fresh chat
 
 
-@app.route("/api/delete_source", methods=["GET"])
-def delete_source_route():
-    folder_name = "SOURCE_DOCUMENTS"
-
-    if os.path.exists(folder_name):
-        shutil.rmtree(folder_name)
-
-    os.makedirs(folder_name)
-
-    return jsonify({"message": f"Folder '{folder_name}' successfully deleted and recreated."})
 
 
-@app.route("/api/save_document", methods=["GET", "POST"])
-def save_document_route():
-    if "document" not in request.files:
-        return "No document part", 400
-    file = request.files["document"]
-    if file.filename == "":
-        return "No selected file", 400
-    if file:
-        filename = secure_filename(file.filename)
-        folder_path = "SOURCE_DOCUMENTS"
-        if not os.path.exists(folder_path):
-            os.makedirs(folder_path)
-        file_path = os.path.join(folder_path, filename)
-        file.save(file_path)
-        return "File saved successfully", 200
+########################################  1. Ingest new docs ########################################################################
 
+@app.route("/userinfo", methods=['POST'])
+def userinfo():
+    chatUser = {'name': "N/A", 'org' : "N/A", 'email' : "N/A"}
+    userinfo = request.form
+    chatUser['name'] = userinfo['user']
+    chatUser['org'] = userinfo['orgInfo']
+    chatUser['email'] = userinfo['email']
+    logging.info("User info saved. \n {chatUser}")
+    return jsonify({"message": "User Info Saved"}), 200
 
-@app.route("/api/run_ingest", methods=["GET"])
-def run_ingest_route():
+    
+########################################## 2. Re ingest #####################################################################
+@app.route("/ingest_new", methods=["POST"])
+def ingest_new():
     global DB
     global RETRIEVER
+    global prompt
+    global memory
+    global QA
+    # if not files are passed
+    if 'files' not in request.files:
+        return jsonify({"error": "No files part"}), 400
+
+    # gets list of all files passed
+    files = request.files.getlist('files')
+    unsupported_files=[]
+    files_to_ingest = False
+
+    try:
+        for file in files:
+            # verify if files are supported, save to folder if supported
+            if file and allowed_file(file.filename):
+                # Process each file here
+                file_path = os.path.join(NEW_INGEST_FOLDER, file.filename)
+                if not os.path.exists(NEW_INGEST_FOLDER):
+                    os.makedirs(NEW_INGEST_FOLDER)
+                    file.save(file_path)
+                    files_to_ingest = True
+            # if files are not supported, adding them to a new list and can be notified in response
+            else:
+                unsupported_files.append(file)
+
+        # Ingesting the new documents directory
+        if files_to_ingest:
+            DB, RETRIEVER, prompt, memory, QA, status = ingest(NEW_INGEST_FOLDER, DEVICE_TYPE, LLM, SHOW_SOURCES)
+        else:
+            logging.info("No Supported files to Ingest. Skipping it")
+
+        # Adding new files to original Source_directory
+        if status == 'Completed':
+            merge_source_docs(NEW_INGEST_FOLDER, SOURCE_DIRECTORY)
+            logging.info("New files are added to Source Directory")
+        return jsonify({"message": "All Supported files are Ingested, File Directories updated", "unsupported":unsupported_files}), 200
+
+    except Exception as e:
+        return jsonify({"message" : f"Error occurred: {str(e)}"}), 500
+    
+
+
+
+############################################ 3. Re Ingest all Documents ###################################################################
+@app.route("/re_ingest_all", methods=["GET"])
+def re_ingest_all():
+    global DB
+    global RETRIEVER
+    global prompt
+    global memory
     global QA
     try:
+        # if there is a folder named DB, deleting it.
         if os.path.exists(PERSIST_DIRECTORY):
             try:
                 shutil.rmtree(PERSIST_DIRECTORY)
+                os.remove("file_ingest.log")
             except OSError as e:
                 print(f"Error: {e.filename} - {e.strerror}.")
         else:
-            print("The directory does not exist")
+            print("No previous knowledge base exists")    
 
-        run_langest_commands = ["python", "ingest.py"]
-        if DEVICE_TYPE == "cpu":
-            run_langest_commands.append("--device_type")
-            run_langest_commands.append(DEVICE_TYPE)
+        DB, RETRIEVER, prompt, memory, QA, status = ingest(SOURCE_DIRECTORY, DEVICE_TYPE, LLM, SHOW_SOURCES)
 
-        result = subprocess.run(run_langest_commands, capture_output=True)
-        if result.returncode != 0:
-            return "Script execution failed: {}".format(result.stderr.decode("utf-8")), 500
-        # load the vectorstore
-        DB = Chroma(
-            persist_directory=PERSIST_DIRECTORY,
-            embedding_function=EMBEDDINGS,
-            client_settings=CHROMA_SETTINGS,
-        )
-        RETRIEVER = DB.as_retriever()
-        prompt, memory = get_prompt_template(promptTemplate_type="llama", history=False)
+        if status == "Completed":
+            logging.info("All Source Documents are added to Knowledge Base")
 
-        QA = RetrievalQA.from_chain_type(
-            llm=LLM,
-            chain_type="stuff",
-            retriever=RETRIEVER,
-            return_source_documents=SHOW_SOURCES,
-            chain_type_kwargs={
-                "prompt": prompt,
-            },
-        )
-        return "Script executed successfully: {}".format(result.stdout.decode("utf-8")), 200
+        return jsonify({"message": f"Folder '{PERSIST_DIRECTORY}' Vector DB deleted and  Re-ingested all the documents."})
     except Exception as e:
-        return f"Error occurred: {str(e)}", 500
+        return jsonify({"message" : f"Error occurred: {str(e)}"}), 500
+
+###################################################### 3. Chat with LLM ##########################################################
+@app.route("/chat_llm", methods=["POST"])
+def chat_llm():
+    try:
+        # Get the request data
+        data = request.get_json()
+        question = data.get("prompt")
+        history = data.get("history", [])
+
+        # Wrap the chat_stream generator in a Flask response
+        def stream_response():
+            try:
+                # Run the chat_stream coroutine in an event loop
+                result = asyncio.run(chat_stream(question, history))
+                for chunk in result:
+                    yield chunk
+            except Exception as e:
+                yield f"Error occurred: {str(e)}"
+
+        return Response(stream_with_context(stream_response()), mimetype="text/event-stream")
+
+    except Exception as e:
+        return jsonify({"message": f"Error occurred: {str(e)}"}), 500
 
 
-@app.route("/api/prompt_route", methods=["GET", "POST"])
-def prompt_route():
-    global QA
-    global request_lock  # Make sure to use the global lock instance
-    user_prompt = request.form.get("user_prompt")
-    if user_prompt:
-        # Acquire the lock before processing the prompt
-        with request_lock:
-            # print(f'User Prompt: {user_prompt}')              
-            # Get the answer from the chain
-            res = QA(user_prompt)
-            answer, docs = res["result"], res["source_documents"]
+    
 
-            prompt_response_dict = {
-                "Prompt": user_prompt,
-                "Answer": answer,
-            }
 
-            prompt_response_dict["Sources"] = []
-            for document in docs:
-                prompt_response_dict["Sources"].append(
-                    (os.path.basename(str(document.metadata["source"])), str(document.page_content))
-                )
+############################################## 4. Summarize the conversation #################################################################
+@app.route("/chat_summary", methods=["POST"])
+def chat_summary():
 
-        return jsonify(prompt_response_dict), 200
-    else:
-        return "No user prompt received", 400
+    return jsonify({"message": f"Folder '{PERSIST_DIRECTORY}' Summary to the chat recieved."})
+############################################################# 5. Feedback storing ##################################################
+@app.route("/chat_feedback", methods=["POST"])
+def chat_feedback():
+    try:
+        feedback_data = request.form
+        store_feedback(chatUser, feedback_data)
+        return jsonify({"message": f"Folder '{PERSIST_DIRECTORY}' Feedback for the response recieved."})
+    except Exception as e:
+        return jsonify({"message" : f"Exception while saving feedback {str(e)}"}), 500
+
+########################################################### 6. Clear chat history. Fresh chat ####################################################
+@app.route("/chat_clear", methods=["GET"])
+def chat_clear():
+    return jsonify({"message": f"Folder '{PERSIST_DIRECTORY}' Conversation Cleared."})
+###############################################################################################################
+
+
+
+
+
 
 
 if __name__ == "__main__":
@@ -182,9 +210,10 @@ if __name__ == "__main__":
         "Set to 0.0.0.0 to make the UI externally "
         "accessible from other devices.",
     )
+    parser.add_argument("--debug",type=bool, default=False)
     args = parser.parse_args()
 
     logging.basicConfig(
         format="%(asctime)s - %(levelname)s - %(filename)s:%(lineno)s - %(message)s", level=logging.INFO
     )
-    app.run(debug=False, host=args.host, port=args.port)
+    app.run(debug=args.debug, host=args.host, port=args.port)
