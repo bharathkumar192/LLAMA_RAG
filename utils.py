@@ -383,9 +383,17 @@ def load_model(device_type, model_id, model_basename=None, LOGGING=logging):
     logging.info("Local LLM Loaded")
     return local_llm
 
+async def chat(question: str, chat_history=[]):
+    try:
+        chain = await qa_chain()
+        history = form_history_obj(chat_history)
+        input = {"input": question, "chat_history": history}
+        result = chain.invoke(input)
+        return result
+    except Exception as e:
+        print(e)
+        raise e
 
-
-# The async chat streaming function
 async def chat_stream(question: str, chat_history=[]):
     try:
         callback = AsyncIteratorCallbackHandler()

@@ -148,7 +148,7 @@ def re_ingest_all():
 
 ###################################################### 3. Chat with LLM ##########################################################
 # Wrap the async function to run in an event loop
-def run_async(func, *args):
+async def run_async(func, *args):
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     result = loop.run_until_complete(func(*args))
@@ -157,7 +157,7 @@ def run_async(func, *args):
 
 # Flask route for chat streaming
 @app.route("/chat_llm", methods=["POST"])
-def chat_llm():
+async def chat_llm():
     try:
         # Get the request data
         data = request.get_json()
@@ -185,8 +185,17 @@ async def collect_stream(async_gen):
         chunks.append(chunk)
     return chunks
 
-
-    
+# #########################################################################################################
+@app.route("/chat_direct", methods=["POST"])
+async def chat_api(chat_request: ChatRequest):
+    try:
+        prompt = chat_request.prompt
+        history = chat_request.history
+        result = await chat(prompt, history)
+        return result
+    except Exception as e:
+        print(e)
+        raise e
 
 
 ############################################## 4. Summarize the conversation #################################################################
