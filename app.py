@@ -148,13 +148,14 @@ def re_ingest_all():
 
 ###################################################### 3. Chat with LLM ##########################################################
 # Wrap the async function to run in an event loop
-def start_async_loop(async_gen):
+def run_async(func, *args):
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
-    result = loop.run_until_complete(async_gen)
+    result = loop.run_until_complete(func(*args))
     loop.close()
     return result
 
+# Flask route for chat streaming
 @app.route("/chat_llm", methods=["POST"])
 def chat_llm():
     try:
@@ -167,20 +168,22 @@ def chat_llm():
         # Prepare the async generator
         async_gen = chat_stream(question, history)
 
-        # Run the async generator in a separate thread
-        result = threading.Thread(target=start_async_loop, args=(async_gen,))
-        result.start()
-        result.join()
-
-        # Stream the response
+        # Use a thread to run the async loop
         def generate():
-            for chunk in result:
+            for chunk in run_async(collect_stream, async_gen):
                 yield chunk
 
         return Response(stream_with_context(generate()), mimetype="text/event-stream")
 
     except Exception as e:
         return jsonify({"message": f"Error occurred: {str(e)}"}), 500
+
+# Helper function to collect async generator output
+async def collect_stream(async_gen):
+    chunks = []
+    async for chunk in async_gen:
+        chunks.append(chunk)
+    return chunks
 
 
     
