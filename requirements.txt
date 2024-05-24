@@ -19,7 +19,7 @@ langchain-community
 langchain-core
 flask_cors
 langchain_text_splitters
-pyngrock
+pyngrok
 # Utilities
 urllib3==1.26.6
 accelerate
