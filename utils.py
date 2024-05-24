@@ -8,7 +8,7 @@ import click
 import torch
 from langchain_community.vectorstores import Chroma
 from LLAMA_RAG.constants import *
-from langchain.embeddings import HuggingFaceEmbeddings
+from langchain_community.embeddings import HuggingFaceEmbeddings
 import sqlite3
 from datetime import datetime
 from transformers import pipeline, TextStreamer, GenerationConfig
