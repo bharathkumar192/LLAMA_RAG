@@ -7,7 +7,8 @@ from langchain_community.vectorstores import Chroma
 from langchain_text_splitters import Language, RecursiveCharacterTextSplitter
 
 nltk.download('punkt')
-
+from huggingface_hub import  HfFolder
+HfFolder.save_token('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')
 from constants import *
 from utils import *
 from constants import EMBEDDING_MODEL_NAME
@@ -46,7 +47,7 @@ def main(device_type):
     embeddings = get_embeddings(device_type)
     logging.info(f"Loaded embeddings from {EMBEDDING_MODEL_NAME}")
 
-    db = Chroma.from_documents(
+    Chroma.from_documents(
         texts,
         embeddings,
         persist_directory=PERSIST_DIRECTORY,

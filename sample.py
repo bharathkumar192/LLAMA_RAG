@@ -19,7 +19,7 @@ from constants import (
     SOURCE_DIRECTORY,
 )
 from constants import EMBEDDING_MODEL_NAME
-from langchain.embeddings import HuggingFaceEmbeddings
+from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_community.vectorstores import Chroma
 
 def get_embeddings(device_type="cpu"):

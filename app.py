@@ -6,7 +6,6 @@ import argparse
 
 import torch
 from flask import Flask, jsonify, request, stream_with_context, Response
-from main import load_model
 import asyncio
 from constants import *
 from utils import *
@@ -14,9 +13,7 @@ from pydantic import BaseModel
 from typing import List, Any
 from flask_ngrok import run_with_ngrok
 import threading
-import getpass
-from pyngrok import ngrok, conf
-
+from pyngrok import ngrok
 
 class ChatRequest(BaseModel):
     prompt: str
@@ -164,16 +161,24 @@ def chat_llm():
         question = data.get("prompt")
         history = data.get("history", [])
         print(question, history)
+        qa = retrieval_qa_pipline("cuda", True, llm=LLM ,promptTemplate_type="llama3")
 
+        res = qa(question)
+        print("====================",res)
+        answer, docs = res["result"], res["source_documents"]
+        sources=[]
+        for document in docs:
+            sources.append(document.metadata["source"])
+        return jsonify({"answer" : answer, "docs": sources})
         # Prepare the async generator
-        async_gen = chat_stream(question, history)
+        # async_gen = chat_stream(question, history)
 
         # Use a thread to run the async loop
-        def generate():
-            for chunk in run_async(collect_stream, async_gen):
-                yield chunk
+        # def generate():
+        #     for chunk in run_async(collect_stream, async_gen):
+        #         yield chunk
 
-        return Response(stream_with_context(generate()), mimetype="text/event-stream")
+        # return Response(stream_with_context(generate()), mimetype="text/event-stream")
 
     except Exception as e:
         return jsonify({"message": f"Error occurred: {str(e)}"}), 500
@@ -230,9 +235,7 @@ if __name__ == "__main__":
     logging.basicConfig(
         format="%(asctime)s - %(levelname)s - %(filename)s:%(lineno)s - %(message)s", level=logging.INFO
     )
-    print("Enter your authtoken, which can be copied from https://dashboard.ngrok.com/get-started/your-authtoken")
-    conf.get_default().auth_token = getpass.getpass()
-    ngrok.set_auth_token(conf.get_default().auth_token)
+    ngrok.set_auth_token("2gtde6QPcIZPmHSSq0ZhCfW3jli_3ANYfarF8RhuJQbFB7ym1")
 
     public_url = ngrok.connect(5000).public_url
     print(f"ngrok tunnel \"{public_url}\" -> \"http://127.0.0.1:5000/\"")

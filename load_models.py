@@ -24,12 +24,13 @@ def load_full_model(model_id, model_basename ,device_type, logging):
                 )
         model = AutoModelForCausalLM.from_pretrained(
             model_id,
-            device_map="auto",
+            device_map="cuda",
             torch_dtype=torch.float16,
             low_cpu_mem_usage=True,
             cache_dir=MODELS_PATH,
             trust_remote_code=True,  # set these if you are using NVIDIA GPU
-            quantization_config=bnb_config
+            quantization_config=bnb_config,
+            # return_full_text=False
         )
 
         model.tie_weights()

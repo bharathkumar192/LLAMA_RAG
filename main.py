@@ -16,12 +16,14 @@ from transformers import (
     pipeline,
     TextStreamer
 )
-
+from utils import *
 from load_models import load_full_model
-
+from huggingface_hub import  HfFolder
+HfFolder.save_token('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')
 from constants import *
 from constants import EMBEDDING_MODEL_NAME
-from langchain.embeddings import HuggingFaceEmbeddings
+from langchain_community.embeddings import HuggingFaceEmbeddings
+llm = load_model("cuda", model_id=MODEL_ID, model_basename=MODEL_BASENAME, LOGGING=logging)
 
 def get_embeddings(device_type="cuda"):
     return HuggingFaceEmbeddings(
@@ -52,7 +54,7 @@ def load_model(device_type, model_id, model_basename=None, LOGGING=logging):
     return local_llm
 
 
-def retrieval_qa_pipline(device_type, use_history, promptTemplate_type="llama"):
+def retrieval_qa_pipline(device_type, use_history,llm ,promptTemplate_type="llama"):
     embeddings = get_embeddings(device_type)
 
     logging.info(f"Loaded embeddings from {EMBEDDING_MODEL_NAME}")
@@ -62,7 +64,6 @@ def retrieval_qa_pipline(device_type, use_history, promptTemplate_type="llama"):
     # get the prompt template and memory if set by the user.
     prompt, memory = get_prompt_template(promptTemplate_type=promptTemplate_type, history=use_history)
     # load the llm pipeline
-    llm = load_model(device_type, model_id=MODEL_ID, model_basename=MODEL_BASENAME, LOGGING=logging)
 
     if use_history:
         qa = RetrievalQA.from_chain_type(
@@ -135,12 +136,14 @@ def main(device_type, show_sources, use_history, model_type, save_qa):
     if not os.path.exists(MODELS_PATH):
         os.mkdir(MODELS_PATH)
 
-    qa = retrieval_qa_pipline(device_type, use_history, promptTemplate_type=model_type)
+    qa = retrieval_qa_pipline(device_type, use_history,llm ,promptTemplate_type=model_type)
     while True:
         query = input("\nEnter a query: ")
         if query == "exit":
             break
         # Get the answer from the chain
+        logging.info("Passing question into QA Retriever")
+
         res = qa(query)
         answer, docs = res["result"], res["source_documents"]
 
