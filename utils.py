@@ -27,7 +27,18 @@ from langchain_community.llms import HuggingFacePipeline
 from langchain_core.documents import Document
 from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.callbacks import CallbackManager, StreamingStdOutCallbackHandler
-callback_manager = CallbackManager([StreamingStdOutCallbackHandler()])
+from langchain.callbacks.base import BaseCallbackHandler
+
+class SimpleCallback(BaseCallbackHandler):
+    
+    def __init__(self):
+        pass
+
+    def on_llm_start(self, serialized, prompts, **kwargs):
+        print(f"LLM Start triggered with prompt - {prompts}")
+
+callback_manager = CallbackManager([SimpleCallback()])
+
 
 
 

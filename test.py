@@ -19,25 +19,23 @@ def stream_url(url, payload):
     # Make a POST request and stream the response
     with requests.post(url, json=payload, headers=headers, stream=True) as response:
         try:
-            # Check if the response was successful
-            response.raise_for_status()
-            # Iterate over the response
-            for chunk in response.iter_lines():
-                if chunk:  # filter out keep-alive new chunks
-                    print(chunk.decode())
-        except requests.exceptions.HTTPError as e:
-            print(f"HTTP Error: {e}")
+            for line in response.iter_lines():
+                if line:
+                    decoded_line = line.decode('utf-8')
+                    print(decoded_line)
+        except KeyboardInterrupt:
+            print("Stream was interrupted by the user.")
         except requests.exceptions.RequestException as e:
             print(f"Request Error: {e}")
         except Exception as e:
             print(f"Error: {e}")
 
 # URL from your Flask application
-url = "https://dd85-34-127-85-100.ngrok-free.app/chat_llm"
+url = "http://localhost:5000/chat_stream"
 
 # Example payload based on your Flask endpoint
 payload = {
-    "prompt": "Hello, how can I help you today?",
+    "prompt": "What is deterministic encryption?",
     "history": []
 }
 

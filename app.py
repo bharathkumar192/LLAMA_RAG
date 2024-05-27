@@ -14,6 +14,7 @@ from typing import List, Any
 from flask_ngrok import run_with_ngrok
 import threading
 from pyngrok import ngrok
+from langchain.callbacks.base import AsyncCallbackHandler, BaseCallbackHandler
 
 class ChatRequest(BaseModel):
     prompt: str
@@ -169,17 +170,7 @@ def chat_llm():
         sources=[]
         for document in docs:
             sources.append(document.metadata["source"])
-        return jsonify({"answer" : answer, "docs": sources})
-        # Prepare the async generator
-        # async_gen = chat_stream(question, history)
-
-        # Use a thread to run the async loop
-        # def generate():
-        #     for chunk in run_async(collect_stream, async_gen):
-        #         yield chunk
-
-        # return Response(stream_with_context(generate()), mimetype="text/event-stream")
-
+        return jsonify({"answer": answer, "docs": sources})
     except Exception as e:
         return jsonify({"message": f"Error occurred: {str(e)}"}), 500
 
@@ -202,6 +193,38 @@ async def chat_api(chat_request: ChatRequest):
     except Exception as e:
         print(e)
         raise e
+
+
+##########################################################################################################################################s
+
+@app.route("/chat_stream", methods=["POST"])
+def chat_stream():
+    @stream_with_context
+    def generate():
+        try:
+            data = request.get_json()
+            question = data.get("prompt")
+            history = data.get("history", [])
+            print("Received question: ", question)
+            yield "Data received, processing...\n"
+            
+            qa = retrieval_qa_pipline("cuda", True, llm=LLM, promptTemplate_type="llama3")
+
+            # res = qa(question)
+            # answer, docs = res["result"], res["source_documents"]
+            # sources = [document.metadata["source"] for document in docs]
+
+            with AsyncCallbackHandler():
+                for response in qa(question):
+                    yield response['result']
+            
+            # # Assuming the complete answer is ready to be sent back
+            # response = jsonify({"answer": answer, "docs": sources})
+            # yield response.get_data(as_text=True)
+        except Exception as e:
+            yield str(jsonify({"message": f"Error occurred: {str(e)}"}))
+
+    return app.response_class(stream_with_context(generate()))
 
 
 ############################################## 4. Summarize the conversation #################################################################
