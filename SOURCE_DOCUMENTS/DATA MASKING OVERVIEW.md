@@ -6,6 +6,15 @@ replacing sensitive data with fictitious yet realistic looking data. It helps
 you generate realistic and fully functional data with similar characteristics
 as the original data to replace sensitive or confidential information.
 
+
+
+Tablespace requirements for data masking:
+Data Masking requires additional space, which today is around 5x where x is the size of the largest table being masked.
+The breakdown of this 5x is:
+TEMP tablespace should be roughly 2x and
+The tablespace where masking is running should be roughly 3x.
+
+
 ### The Challenge
 
 The amount of data that organizations collect and manage, including sensitive
@@ -354,13 +363,4 @@ would include permissions on all of the resources above. See [data-safe-
 masking-family Resource](/pls/topic/lookup?ctx=en/cloud/paas/data-
 safe&id=ADMDS-GUID-56A59CC3-45E4-411C-B862-E825FDC23E1D) in the Administering
 Oracle Data Safe guide for more information.
-
-
-
-
-Tablespace requirements for data masking:
-Data Masking requires additional space, which today is around 5x where x is the size of the largest table being masked.
-The breakdown of this 5x is:
-TEMP tablespace should be roughly 2x and
-The tablespace where masking is running should be roughly 3x.
 
