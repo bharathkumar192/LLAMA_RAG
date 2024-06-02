@@ -1,11 +1,9 @@
 import logging
 import os
 import shutil
-import subprocess
-import argparse
 
 import torch
-from flask import Flask, jsonify, request, stream_with_context, Response
+from flask import Flask, jsonify, request, stream_with_context
 import asyncio
 from constants import *
 from utils import *
@@ -14,7 +12,7 @@ from typing import List, Any
 from flask_ngrok import run_with_ngrok
 import threading
 from pyngrok import ngrok
-from langchain.callbacks.base import AsyncCallbackHandler, BaseCallbackHandler
+import traceback
 
 class ChatRequest(BaseModel):
     prompt: str
@@ -40,6 +38,7 @@ LLM = load_model(device_type=DEVICE_TYPE, model_id=MODEL_ID, model_basename=MODE
 
 from flask_cors import CORS
 app = Flask(__name__)
+# app.debug = True
 cors = CORS(app)
 run_with_ngrok(app)
 app.config['CORS_HEADERS'] = 'Content-Type'
@@ -162,16 +161,21 @@ def chat_llm():
         question = data.get("prompt")
         history = data.get("history", [])
         print(question, history)
-        qa = retrieval_qa_pipline("cuda", True, llm=LLM ,promptTemplate_type="llama3")
+        qa = retrieval_qa_pipline("cuda", llm=LLM, history=history, current_question=question)
+        input_data = {
+                    "query": question,
+                    "chat_history": history
+                }
 
-        res = qa(question)
+        # Execute the QA pipeline with the prepared inputs
+        res = qa(input_data)
         print("====================",res)
         answer, docs = res["result"], res["source_documents"]
-        sources=[]
-        for document in docs:
-            sources.append(document.metadata["source"])
+        sources = [convert_to_url(docs[0].metadata["source"])]
         return jsonify({"answer": answer, "docs": sources})
     except Exception as e:
+        print("Error occured =======",e)
+        print(traceback.format_exc())
         return jsonify({"message": f"Error occurred: {str(e)}"}), 500
 
 # Helper function to collect async generator output
@@ -210,13 +214,13 @@ def chat_stream():
             
             qa = retrieval_qa_pipline("cuda", True, llm=LLM, promptTemplate_type="llama3")
 
-            # res = qa(question)
-            # answer, docs = res["result"], res["source_documents"]
-            # sources = [document.metadata["source"] for document in docs]
+            res = qa(question)
+            answer, docs = res["result"], res["source_documents"]
+            sources = [document.metadata["source"] for document in docs]
 
-            with AsyncCallbackHandler():
-                for response in qa(question):
-                    yield response['result']
+            # with AsyncCallbackHandler():
+            #     for response in qa(question):
+            #         yield response['result']
             
             # # Assuming the complete answer is ready to be sent back
             # response = jsonify({"answer": answer, "docs": sources})
@@ -260,7 +264,7 @@ if __name__ == "__main__":
     )
     ngrok.set_auth_token("2gtde6QPcIZPmHSSq0ZhCfW3jli_3ANYfarF8RhuJQbFB7ym1")
 
-    public_url = ngrok.connect(5000).public_url
+    public_url = ngrok.connect(5000, hostname="monarch-modest-cod.ngrok-free.app")
     print(f"ngrok tunnel \"{public_url}\" -> \"http://127.0.0.1:5000/\"")
     app.config["BASE_URL"] = public_url
 

@@ -4,30 +4,25 @@ import csv
 from datetime import datetime
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 import logging
-import click
-import torch
 from langchain_community.vectorstores import Chroma
 from constants import *
 from langchain_community.embeddings import HuggingFaceEmbeddings
 import sqlite3
 from datetime import datetime
 from transformers import pipeline, TextStreamer, GenerationConfig
-from langchain_community.document_loaders import DirectoryLoader
 from langchain_text_splitters import Language, RecursiveCharacterTextSplitter
-import asyncio
-from langchain.callbacks.streaming_aiter import AsyncIteratorCallbackHandler
 from load_models import load_full_model
 from langchain.chains import RetrievalQA
-from prompt_template_utils import get_prompt_template,system_prompt
-from langchain.chains import create_history_aware_retriever, create_retrieval_chain
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain.chains.combine_documents import create_stuff_documents_chain
+from prompt_template_utils import get_prompt_template, get_prompt_template_with_pre_prompt,system_prompt
 from llm_templates import Formatter, Conversation, Content
 from langchain_community.llms import HuggingFacePipeline
 from langchain_core.documents import Document
 from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.callbacks import CallbackManager, StreamingStdOutCallbackHandler
 from langchain.callbacks.base import BaseCallbackHandler
+from llm_templates import Formatter, Conversation, Content
+from prompt_template_utils import system_prompt
+from langchain.memory import ConversationBufferMemory
 
 class SimpleCallback(BaseCallbackHandler):
     
@@ -190,7 +185,7 @@ def ingest(path,device_type, LLM, SHOW_SOURCES=True):
     DB = Chroma.from_documents(texts,embeddings,persist_directory=PERSIST_DIRECTORY,client_settings=CHROMA_SETTINGS)
 
     RETRIEVER = DB.as_retriever()
-    prompt, memory = get_prompt_template(promptTemplate_type="llama3", history=True)
+    prompt, memory = get_prompt_template()
     
     QA = RetrievalQA.from_chain_type(
         llm=LLM,
@@ -336,33 +331,10 @@ def form_history_obj(history):
 
 
 
-
-# async def qa_chain(llm, retriever, chat_history):
-#     # Convert chat history into the format required by llama3
-#     formatted_history = form_history_obj(chat_history)
-    
-#     # Set up the prompt template with system and placeholder for user input
-#     messages = [Content(role="system", content=system_prompt)]
-#     messages.extend([Content(role="user", content=msg.content) for msg in formatted_history if isinstance(msg, HumanMessage)])
-#     messages.append(Content(role="assistant", content=""))  
-
-#     # Create the conversation object
-#     conversation = Conversation(model='llama3', messages=messages)
-#     conversation_str = Formatter().render(conversation, add_assistant_prompt=True)
-    
-#     # Use the existing retrieval and document processing chains but now with the new conversation
-#     qa_prompt = ChatPromptTemplate.from_template(conversation_str)
-#     question_answer_chain = create_stuff_documents_chain(llm, qa_prompt)
-#     history_aware_retriever = create_history_aware_retriever(llm, retriever, qa_prompt)
-#     rag_chain = create_retrieval_chain(history_aware_retriever, question_answer_chain)
-
-#     return rag_chain
-
-
 def load_model(device_type, model_id, model_basename=None, LOGGING=logging):
     logging.info(f"Loading Model: {model_id}, on: {device_type}")
     logging.info("This action can take a few minutes!")
-    model, tokenizer = load_full_model(model_id, model_basename, device_type, LOGGING)
+    model, tokenizer = load_full_model(model_id, model_basename, LOGGING)
     generation_config = GenerationConfig.from_pretrained(model_id)
     streamer = TextStreamer(tokenizer, skip_prompt=True)
     pipe = pipeline(
@@ -382,133 +354,55 @@ def load_model(device_type, model_id, model_basename=None, LOGGING=logging):
     logging.info("Local LLM Loaded")
     return local_llm
 
-# async def chat(question: str, chat_history=[]):
-#     try:
-#         callback = AsyncIteratorCallbackHandler()
-#         chain, retriever = await create_qa_chain(callback, chat_history)
-#         history = form_history_obj(chat_history)
-#         input = {"input": question, "chat_history": history}
-#         result = chain.invoke(input)
-#         return result
-#     except Exception as e:
-#         print(e)
-#         raise e
 
-# async def chat_stream(question: str, chat_history=[]):
-#     try:
-#         callback = AsyncIteratorCallbackHandler()
-#         chain, retriever = await create_qa_chain(callback, chat_history)
-#         history = form_history_obj(chat_history)
-#         input = {"input": question, "chat_history": history}
-#         task = asyncio.create_task(chain.ainvoke(input=input))
-#         print("Stream start")
-#         async for token in callback.aiter():
-#             print(token)
-#             yield token
-
-#         await task
-#     except Exception as e:
-#         print(e)
-#         raise e
-
-
-
-
-
-# # Function to load the Llama3 model
-# def load_llama3_model():
-#     device_type = "cuda" if torch.cuda.is_available() else "cpu"
-#     model_id = MODEL_ID  # Replace with actual model ID
-#     model, tokenizer = load_full_model(model_id, model_basename=None, device_type=device_type, logging=logging)
-#     generation_config = GenerationConfig.from_pretrained(model_id)
-#     streamer = TextStreamer(tokenizer, skip_prompt=True)
-#     pipe = pipeline(
-#         "text-generation",
-#         model=model,
-#         tokenizer=tokenizer,
-#         max_length=512,
-#         temperature=0.7,
-#         repetition_penalty=1.2,
-#         generation_config=generation_config,
-#         streamer=streamer,
-#         eos_token_id=tokenizer.eos_token_id
-#     )
-#     return HuggingFacePipeline(pipeline=pipe)
-
-# async def create_qa_chain(callback, chat_history):
-#     contextualize_q_system_prompt = """
-#     Given a chat history and the latest user question which might reference context in the chat history, formulate a standalone question which can be understood without the chat history. Do NOT answer the question, just reformulate it if needed and otherwise return it as is.
-#     """
-#     contextualize_q_prompt = ChatPromptTemplate.from_messages(
-#         [
-#             ("system", contextualize_q_system_prompt),
-#             MessagesPlaceholder("chat_history"),
-#             ("human", "{input}"),
-#         ]
-#     )
-#     embeddings = get_embeddings("cuda")
-#     db = Chroma(persist_directory=PERSIST_DIRECTORY, embedding_function=embeddings, client_settings=CHROMA_SETTINGS)
-#     retriever = db.as_retriever()
-    
-#     llm = load_llama3_model()
-
-#     history_aware_retriever = create_history_aware_retriever(
-#         llm, retriever, contextualize_q_prompt
-#     )
-    
-#     qa_system_prompt = """
-#     You are an assistant for question-answering tasks. Use the following pieces of retrieved context to answer the question. If you don't know the answer, just say that you don't know.
-
-#     {context}
-    
-#     Always provide your answers in markdown format
-#     """
-#     qa_prompt = ChatPromptTemplate.from_messages(
-#         [
-#             ("system", qa_system_prompt),
-#             MessagesPlaceholder("chat_history"),
-#             ("human", "{input}"),
-#         ]
-#     )
-    
-#     streaming_llm = load_llama3_model()
-#     question_answer_chain = create_stuff_documents_chain(streaming_llm, qa_prompt)
-#     rag_chain = create_retrieval_chain(history_aware_retriever, question_answer_chain)
-    
-#     return rag_chain
-
-
-
-def retrieval_qa_pipline(device_type, use_history, llm ,promptTemplate_type="llama"):
+def retrieval_qa_pipline(device_type, llm, history, current_question="hello"):
     embeddings = get_embeddings(device_type)
-
     logging.info(f"Loaded embeddings from {EMBEDDING_MODEL_NAME}")
     db = Chroma(persist_directory=PERSIST_DIRECTORY, embedding_function=embeddings, client_settings=CHROMA_SETTINGS)
     retriever = db.as_retriever()
 
-    # get the prompt template and memory if set by the user.
-    prompt, memory = get_prompt_template(promptTemplate_type=promptTemplate_type, history=use_history)
-    # load the llm pipeline
-    # llm = load_model(device_type, model_id=MODEL_ID, model_basename=MODEL_BASENAME, LOGGING=logging)
-
-    if use_history:
-        qa = RetrievalQA.from_chain_type(
-            llm=llm,
-            chain_type="stuff", 
-            retriever=retriever,
-            return_source_documents=True,  
-            callbacks=callback_manager,
-            chain_type_kwargs={"prompt": prompt, "memory": memory},
-        )
-    else:
-        qa = RetrievalQA.from_chain_type(
-            llm=llm,
-            chain_type="stuff",
-            retriever=retriever,
-            return_source_documents=True,  
-            callbacks=callback_manager,
-            chain_type_kwargs={
-                "prompt": prompt,
-            },
-        )
+    # Get the prompt template and memory
+    pre_prompt = generate_model_prompt(history,  current_question)
+    # prompt, memory = get_prompt_template_with_pre_prompt(pre_prompt)
+    prompt, memory = get_prompt_template(pre_prompt)
+    qa = RetrievalQA.from_chain_type(
+        llm=llm,
+        chain_type="stuff",
+        retriever=retriever,
+        return_source_documents=True,
+        callbacks=callback_manager,
+        chain_type_kwargs={
+            "prompt": prompt,
+            "verbose": True,
+            "memory": memory,
+        },
+        verbose=True,
+    )
     return qa
+
+def convert_to_url(file_path):
+    base_url = "https://docs.oracle.com/en/cloud/paas/data-safe/udscs/"
+    file_name = os.path.splitext(os.path.basename(file_path))[0]
+    formatted_name = file_name.replace(' ', '-').lower()
+    url = f"{base_url}{formatted_name}.html"
+    return url
+
+def generate_model_prompt(history, curr_question="hello"):
+    model_name='llama3'
+    history = convert_history_format(history)
+    messages = []
+    for role, content in history:
+        messages.append(Content(role=role, content=content))
+    messages.append(Content(role="user", content=curr_question))
+    conversation = Conversation(model=model_name, messages=messages)
+    formatter = Formatter()
+    conversation_str = formatter.render(conversation, add_assistant_prompt=True) 
+    print("=====",conversation_str)
+    return conversation_str
+
+def convert_history_format(response_history):
+    history = []
+    for entry in response_history:
+        history.append(("user", entry["query"]))
+        history.append(("assistant", entry["response"].strip()))
+    return history
